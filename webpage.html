@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en" class="dark" x-data="app()" :class="{ 'dark': settings.darkMode }" x-init="init()">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VulnScan Dashboard</title>
+  <!-- TailwindCSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              DEFAULT: '#0f766e',
+              light: '#14b8a6',
+              gold: '#f59e0b'
+            }
+          },
+          boxShadow: {
+            'soft': '0 10px 25px -10px rgba(0,0,0,0.35)'
+          },
+          borderRadius: {
+            '2xl': '1rem',
+            '3xl': '1.25rem'
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    html {
+      scroll-behavior: smooth;
+    }
+
+    .fade-in {
+      animation: fadeIn 0.6s ease-out both;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+  <div class="min-h-screen flex">
+    <aside
+      class="hidden md:flex md:flex-col w-72 p-6 bg-white/70 dark:bg-gray-900/60 backdrop-blur border-r border-gray-200/60 dark:border-gray-800/60">
+      <div class="flex items-center gap-2 mb-8">
+        <div class="h-10 w-10 rounded-2xl bg-brand/20 grid place-items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-brand">
+            <path
+              d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 14.5v-2.2a4.5 4.5 0 10-2 0v2.2a1 1 0 001 1h0a1 1 0 001-1zm-1-9.5a3 3 0 110 6 3 3 0 010-6z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-xl font-semibold leading-tight">VulnScan</h1>
+          <p class="text-xs text-gray-500 dark:text-gray-400">Vulnerability Scanner Dashboard</p>
+        </div>
+      </div>
+
+      <nav class="flex-1 space-y-1">
+        <template x-for="item in nav" :key="item.key">
+          <button @click="page=item.key"
+            :class="page===item.key ? 'bg-brand/10 text-brand' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'"
+            class="w-full text-left px-4 py-3 rounded-xl transition">
+            <span class="inline-flex items-center gap-3">
+              <span x-html="item.icon"></span>
+              <span class="font-medium" x-text="item.label"></span>
+            </span>
+          </button>
+        </template>
+      </nav>
+
+      <div
+        class="mt-6 p-4 rounded-2xl bg-gradient-to-br from-brand/10 via-brand/5 to-transparent border border-brand/20">
+        <p class="text-sm mb-2">Quick Action</p>
+        <button @click="page='start'"
+          class="w-full px-4 py-2 rounded-xl bg-brand text-white hover:bg-teal-800 transition shadow-soft">Start New
+          Scan</button>
+      </div>
+
+      <div class="mt-6 text-xs text-gray-500 dark:text-gray-400">v1.1 • Frontend ↔ Backend</div>
+    </aside>
+
+    <main class="flex-1 p-4 md:p-8 space-y-6">
+      <header class="flex items-center gap-3 justify-between">
+        <div class="flex items-center gap-3 w-full md:w-auto">
+          <button
+            class="md:hidden p-2 rounded-lg bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-800"
+            @click="mobileOpen = !mobileOpen">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+              <path d="M3 6h18M3 12h18M3 18h18" />
+            </svg>
+          </button>
+          <h2 class="text-2xl md:text-3xl font-bold tracking-tight">Dashboard</h2>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="relative hidden sm:block">
+            <input x-model="search" type="text" placeholder="Search hosts, ports, CVEs..."
+              class="pl-10 pr-3 py-2 rounded-xl bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-800 focus:outline-none focus:ring-2 focus:ring-brand/40 w-72">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+              xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M10 2a8 8 0 105.293 14.293l4.207 4.207 1.414-1.414-4.207-4.207A8 8 0 0010 2zm0 2a6 6 0 110 12A6 6 0 0110 4z" />
+            </svg>
+          </div>
+          <button @click="settings.darkMode=!settings.darkMode; persist()"
+            class="p-2 rounded-xl bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-800 hover:shadow-soft transition"
+            :title="settings.darkMode?'Switch to Light':'Switch to Dark'">
+            <template x-if="settings.darkMode">
+              <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M21.64 13A9 9 0 1111 2.36 7 7 0 1021.64 13z" />
+              </svg>
+            </template>
+            <template x-if="!settings.darkMode">
+              <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                <path
+                  d="M12 18a6 6 0 100-12 6 6 0 000 12zm0-16h1v3h-1V2zM12 19h1v3h-1v-3zM2 13v-1h3v1H2zm17 0v-1h3v1h-3zM5.64 6.05l.7-.7L8.46 6.5l-.7.71-2.12-1.16zM15.54 17.5l.7-.71 2.12 1.16-.7.7-2.12-1.15zM5.64 17.95l2.12-1.16.7.71-2.12 1.15-.7-.7zM16.24 5.34l.7-.7 2.12 1.16-.7.7-2.12-1.16z" />
+              </svg>
+            </template>
+          </button>
+        </div>
+      </header>
+
+      <section class="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+        <div
+          class="rounded-3xl p-5 bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-800 shadow-soft fade-in">
+          <p class="text-sm text-gray-500">Total Scans</p>
+          <p class="text-3xl font-semibold mt-2" x-text="stats.totalScans"></p>
+          <p class="text-xs mt-2 text-gray-500">Updated <span x-text="nowHuman"></span></p>
+        </div>
+        <div
+          class="rounded-3xl p-5 bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-800 shadow-soft fade-in"
+          style="animation-delay:0.05s">
+          <p class="text-sm text-gray-500">Vulnerabilities</p>
+          <p class="text-3xl font-semibold mt-2" x-text="stats.vulns"></p>
+          <div class="mt-3 h-2 w-full bg-gray-200/60 dark:bg-gray-800 rounded-full overflow-hidden">
+            <div class="h-full bg-brand"
+              :style="`width:${Math.min(100, Math.round((stats.critical/Math.max(1,stats.vulns))*100))}%`"></div>
+          </div>
+          <p class="text-xs mt-2 text-gray-500"><span class="text-brand font-medium" x-text="stats.critical"></span>
+            critical</p>
+        </div>
+        <div
+          class="rounded-3xl p-5 bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-800 shadow-soft fade-in"
+          style="animation-delay:0.1s">
+          <p class="text-sm text-gray-500">Active Hosts</p>
+          <p class="text-3xl font-semibold mt-2" x-text="stats.activeHosts"></p>
+          <p class="text-xs mt-2 text-gray-500">Last discovery <span x-text="stats.lastScan"></span></p>
+        </div>
+        <div
+          class="rounded-3xl p-5 bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-800 shadow-soft fade-in"
+          style="animation-delay:0.15s">
+          <p class="text-sm text-gray-500">Open Ports</p>
+          <p class="text-3xl font-semibold mt-2" x-text="stats.openPorts"></p>
+          <p class="text-xs mt-2 text-gray-500">Top: <span x-text="stats.topPort"></span></p>
+        </div>
+      </section>
+
+      <section class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div class="xl:col-span-2 space-y-6">
+          <div
+            class="rounded-3xl p-6 bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-800 shadow-soft">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold">Vulnerability Severity</h3>
+              <div class="text-xs text-gray-500">Critical/High/Medium/Low</div>
+            </div>
+            <canvas id="severityChart" height="120"></canvas>
+          </div>
+
+          <div
+            class="rounded-3xl p-6 bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-800 shadow-soft">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold">Top Open Ports</h3>
+              <div class="text-xs text-gray-500">Count per port</div>
+            </div>
+            <canvas id="portsChart" height="120"></canvas>
+          </div>
+        </div>
+
+        <div class="space-y-6">
+          <div
+            class="rounded-3xl p-6 bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-800 shadow-soft">
+            <h3 class="text-lg font-semibold mb-4">Start New Scan</h3>
+            <div class="space-y-3">
+              <label class="block text-sm">Target / CIDR</label>
+              <input x-model="form.target" type="text" placeholder="192.168.1.0/24 or example.com"
+                class="w-full px-3 py-2 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 focus:outline-none focus:ring-2 focus:ring-brand/40">
+              <label class="block text-sm mt-3">Scan Type</label>
+              <select x-model="form.type"
+                class="w-full px-3 py-2 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+                <option>Quick</option>
+                <option>Full</option>
+                <option>Custom</option>
+              </select>
+              <div class="flex items-center gap-2 mt-2">
+                <input id="osd" x-model="form.osDetect" type="checkbox" class="rounded">
+                <label for="osd" class="text-sm">OS Detection</label>
+              </div>
+              <div class="flex items-center gap-2">
+                <input id="svc" x-model="form.serviceDetect" type="checkbox" class="rounded">
+                <label for="svc" class="text-sm">Service & Version</label>
+              </div>
+              <button @click="startScan()"
+                class="w-full mt-3 px-4 py-2 rounded-xl bg-brand text-white hover:bg-teal-800 transition shadow-soft">Run
+                Scan</button>
+
+              <template x-if="progress.active">
+                <div class="mt-4">
+                  <div class="flex justify-between text-xs mb-1"><span>Progress</span><span
+                      x-text="progress.value + '%'" /></div>
+                  <div class="w-full h-2 bg-gray-200/70 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <div class="h-full bg-brand transition-all" :style="`width:${progress.value}%`"></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div
+            class="rounded-3xl p-6 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent border border-brand/20">
+            <h4 class="font-medium mb-2">Reports</h4>
+            <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">Export current dataset for offline analysis.</p>
+            <div class="flex gap-2">
+              <button @click="exportCSV()"
+                class="px-4 py-2 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:shadow-soft">Download
+                CSV</button>
+              <button @click="printReport()" class="px-4 py-2 rounded-xl bg-brand text-white hover:bg-teal-800">Print /
+                PDF</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="rounded-3xl p-6 bg-white/70 dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-800 shadow-soft">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold">Scan History</h3>
+          <input x-model="historyQuery" type="text" placeholder="Filter by host or status..."
+            class="px-3 py-2 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 w-64">
+        </div>
+        <div class="overflow-auto rounded-2xl border border-gray-200 dark:border-gray-800">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-100/60 dark:bg-gray-800/60">
+              <tr>
+                <th class="px-4 py-2 text-left">#</th>
+                <th class="px-4 py-2 text-left">Target</th>
+                <th class="px-4 py-2 text-left">Type</th>
+                <th class="px-4 py-2 text-left">Status</th>
+                <th class="px-4 py-2 text-left">Vulns</th>
+                <th class="px-4 py-2 text-left">Open Ports</th>
+                <th class="px-4 py-2 text-left">Started</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(row, i) in filteredScans" :key="row.id">
+                <tr
+                  class="border-t border-gray-200/60 dark:border-gray-800/60 hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
+                  <td class="px-4 py-2" x-text="i+1"></td>
+                  <td class="px-4 py-2 font-medium" x-text="row.target"></td>
+                  <td class="px-4 py-2" x-text="row.type"></td>
+                  <td class="px-4 py-2">
+                    <span
+                      :class="row.status==='completed' ? 'bg-green-600/15 text-green-500' : row.status==='running' ? 'bg-amber-500/15 text-amber-500' : 'bg-red-500/15 text-red-500'"
+                      class="px-2 py-1 rounded-lg text-xs font-medium" x-text="row.status"></span>
+                  </td>
+                  <td class="px-4 py-2"
+                    x-text="(row.results && row.results.vulnerabilities) ? row.results.vulnerabilities.length : (row.vulns ?? 0)">
+                  </td>
+                  <td class="px-4 py-2"
+                    x-text="(row.results && row.results.open_ports) ? row.results.open_ports.length : (row.ports ?? 0)">
+                  </td>
+                  <td class="px-4 py-2" x-text="new Date(row.created_at).toLocaleString()"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer class="text-xs text-gray-500 dark:text-gray-400 py-6">© <span x-text="new Date().getFullYear()"></span>
+        VulnScan • Built for your Nmap/Scapy backend</footer>
+    </main>
+  </div>
+
+  <div x-show="mobileOpen" @click.self="mobileOpen=false" class="fixed inset-0 z-50 md:hidden">
+    <div class="absolute inset-0 bg-black/40"></div>
+    <div
+      class="absolute left-0 top-0 h-full w-80 p-6 bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800">
+      <div class="flex items-center justify-between mb-6">
+        <h3 class="font-semibold">VulnScan</h3>
+        <button @click="mobileOpen=false" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <nav class="space-y-2">
+        <template x-for="item in nav" :key="item.key">
+          <button @click="page=item.key; mobileOpen=false"
+            :class="page===item.key ? 'bg-brand/10 text-brand' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'"
+            class="w-full text-left px-4 py-3 rounded-xl transition">
+            <span class="inline-flex items-center gap-3"><span x-html="item.icon"></span><span class="font-medium"
+                x-text="item.label"></span></span>
+          </button>
+        </template>
+      </nav>
+    </div>
+  </div>
+
+  <div x-show="toast.show" x-transition class="fixed bottom-6 right-6 z-50">
+    <div class="px-4 py-3 rounded-xl bg-gray-900 text-white shadow-soft flex items-center gap-3">
+      <span x-html="toast.icon"></span>
+      <span x-text="toast.message"></span>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:8000"
+
+    function app() {
+      return {
+        page: 'dashboard',
+        mobileOpen: false,
+        search: '',
+        historyQuery: '',
+        nowHuman: new Date().toLocaleString(),
+        toast: {
+          show: false,
+          message: '',
+          icon: ''
+        },
+        settings: {
+          darkMode: true
+        },
+        nav: [{
+            key: 'dashboard',
+            label: 'Dashboard',
+            icon: `<svg class='w-5 h-5' viewBox='0 0 24 24' fill='currentColor'><path d='M3 12l9-9 9 9v9a1 1 0 01-1 1h-5v-7H9v7H4a1 1 0 01-1-1v-9z'/></svg>`
+          },
+          {
+            key: 'start',
+            label: 'Start Scan',
+            icon: `<svg class='w-5 h-5' viewBox='0 0 24 24' fill='currentColor'><path d='M12 2a10 10 0 100 20 10 10 0 000-20zm-1 14l6-4-6-4v8z'/></svg>`
+          },
+          {
+            key: 'history',
+            label: 'Scan History',
+            icon: `<svg class='w-5 h-5' viewBox='0 0 24 24' fill='currentColor'><path d='M3 12a9 9 0 1018 0A9 9 0 103 12zm9-6v6l4 2'/></svg>`
+          },
+          {
+            key: 'reports',
+            label: 'Reports',
+            icon: `<svg class='w-5 h-5' viewBox='0 0 24 24' fill='currentColor'><path d='M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm8 0v5h5'/></svg>`
+          },
+          {
+            key: 'settings',
+            label: 'Settings',
+            icon: `<svg class='w-5 h-5' viewBox='0 0 24 24' fill='currentColor'><path d='M12 8a4 4 0 100 8 4 4 0 000-8zm9.4 4a7.4 7.4 0 01-.1 1l2 1.6-2 3.5-2.4-.6a7.6 7.6 0 01-1.7 1l-.4 2.5H9.2l-.4-2.5a7.6 7.6 0 01-1.7-1L4.7 20l-2-3.5L4.7 15a7.4 7.4 0 01-.1-1 7.4 7.4 0 01.1-1l-2-1.6 2-3.5 2.4.6a7.6 7.6 0 011.7-1l.4-2.5h4.7l.4 2.5a7.6 7.6 0 011.7 1L19.3 8l2 3.5-2 1.6c.1.3.1.7.1 1z'/></svg>`
+          },
+        ],
+        stats: {
+          totalScans: 0,
+          vulns: 0,
+          critical: 0,
+          activeHosts: 0,
+          lastScan: '-',
+          openPorts: 0,
+          topPort: '-'
+        },
+        form: {
+          target: '',
+          type: 'Quick',
+          osDetect: true,
+          serviceDetect: true
+        },
+        progress: {
+          active: false,
+          value: 0,
+          scanId: null
+        },
+        scans: [],
+        severityChart: null,
+        portsChart: null,
+        get filteredScans() {
+          const q = this.historyQuery.toLowerCase();
+          return this.scans.filter(r => !q || (r.target && r.target.toLowerCase().includes(q)) || (r.status && r
+            .status.toLowerCase().includes(q)))
+        },
+        init() {
+          const saved = localStorage.getItem('vulnscan.settings');
+          if (saved) {
+            this.settings = JSON.parse(saved)
+          }
+          this.setupCharts();
+          this.loadScans();
+          setInterval(() => {
+            this.loadScans()
+          }, 20000)
+        },
+        persist() {
+          localStorage.setItem('vulnscan.settings', JSON.stringify(this.settings))
+        },
+        setupCharts() {
+          const sevCtx = document.getElementById('severityChart').getContext('2d');
+          const portCtx = document.getElementById('portsChart').getContext('2d');
+          this.severityChart = new Chart(sevCtx, {
+            type: 'doughnut',
+            data: {
+              labels: ['Critical', 'High', 'Medium', 'Low'],
+              datasets: [{
+                data: [0, 0, 0, 0]
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: {
+                  position: 'bottom'
+                }
+              },
+              animation: {
+                animateScale: true,
+                animateRotate: true
+              }
+            }
+          });
+          this.portsChart = new Chart(portCtx, {
+            type: 'bar',
+            data: {
+              labels: [],
+              datasets: [{
+                label: 'Open Ports',
+                data: []
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: {
+                  display: false
+                }
+              },
+              scales: {
+                y: {
+                  beginAtZero: true
+                }
+              },
+              animation: {
+                duration: 800
+              }
+            }
+          })
+        },
+        async loadScans() {
+          try {
+            const res = await fetch(`${API_BASE}/list_scans`);
+            if (!res.ok) throw new Error('Failed to fetch scans');
+            const data = await res.json();
+            console.log(data);
+            data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            this.scans = data;
+            this.recalculateStats()
+          } catch (e) {
+            console.error(e);
+            this.notify('Could not load scans from backend', 'warn')
+          }
+        },
+        recalculateStats() {
+          this.stats.totalScans = this.scans.length;
+          let vulns = 0,
+            critical = 0,
+            portsCount = 0;
+          const portFreq = {};
+          const hosts = new Set();
+          let last = '-';
+          this.scans.forEach(s => {
+            hosts.add(s.target);
+            if (s.results && s.results.vulnerabilities) {
+              vulns += s.results.vulnerabilities.length;
+              s.results.vulnerabilities.forEach(v => {
+                if ((v.severity || '').toLowerCase() === 'critical') critical++
+              })
+            }
+            if (s.results && s.results.open_ports) {
+              portsCount += s.results.open_ports.length;
+              s.results.open_ports.forEach(p => portFreq[p] = (portFreq[p] || 0) + 1)
+            }
+            if (s.created_at && (!last || new Date(s.created_at) > new Date(last))) last = s.created_at
+          });
+          this.stats.vulns = vulns;
+          this.stats.critical = critical;
+          this.stats.activeHosts = hosts.size;
+          this.stats.openPorts = portsCount;
+          this.stats.lastScan = last === '-' ? '-' : new Date(last).toLocaleString();
+          const sortedPorts = Object.entries(portFreq).sort((a, b) => b[1] - a[1]);
+          this.stats.topPort = sortedPorts.length ? sortedPorts[0][0] : '-';
+          const sevCounts = {
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0
+          };
+          this.scans.forEach(s => {
+            if (s.results && s.results.vulnerabilities) {
+              s.results.vulnerabilities.forEach(v => {
+                const sev = (v.severity || '').toLowerCase();
+                if (sevCounts[sev] !== undefined) sevCounts[sev]++;
+                else if (sev === 'high') sevCounts.high++;
+              })
+            }
+          });
+          this.severityChart.data.datasets[0].data = [sevCounts.critical, sevCounts.high, sevCounts.medium, sevCounts
+            .low
+          ];
+          this.severityChart.update();
+          const topPorts = sortedPorts.slice(0, 7);
+          this.portsChart.data.labels = topPorts.map(p => p[0]);
+          this.portsChart.data.datasets[0].data = topPorts.map(p => p[1]);
+          this.portsChart.update();
+          this.nowHuman = new Date().toLocaleString()
+        },
+        async startScan() {
+          if (!this.form.target) {
+            return this.notify('Please enter a target to scan.', 'warn')
+          }
+          try {
+            this.progress.active = true;
+            this.progress.value = 5;
+            const res = await fetch(`${API_BASE}/start_scan?target=${encodeURIComponent(this.form.target)}`, {
+              method: 'POST'
+            });
+            if (!res.ok) throw new Error('start failed');
+            const body = await res.json();
+            const scanId = body.scan_id;
+            this.progress.scanId = scanId;
+            this.notify('Scan queued. Polling for results...', 'ok');
+            this.scans.unshift({
+              id: scanId,
+              target: this.form.target,
+              type: this.form.type,
+              status: 'running',
+              created_at: new Date().toISOString(),
+              results: {}
+            });
+            this.recalculateStats();
+            const poll = setInterval(async () => {
+              try {
+                const r = await fetch(`${API_BASE}/scan_status/${scanId}`);
+                if (!r.ok) throw new Error('status fetch failed');
+                const s = await r.json();
+                const idx = this.scans.findIndex(x => x.id === scanId);
+                if (idx > -1) {
+                  this.scans[idx] = s
+                } else {
+                  this.scans.unshift(s)
+                }
+                if (s.status === 'running') {
+                  this.progress.value = Math.min(95, this.progress.value + Math.floor(Math.random() * 15) + 5)
+                }
+                if (s.status === 'completed') {
+                  clearInterval(poll);
+                  this.progress.value = 100;
+                  this.progress.active = false;
+                  this.notify('Scan completed and indexed.', 'ok');
+                  this.recalculateStats()
+                }
+              } catch (e) {
+                console.error(e);
+                clearInterval(poll);
+                this.progress.active = false;
+                this.notify('Polling failed', 'warn')
+              }
+            }, 2000)
+          } catch (e) {
+            console.error(e);
+            this.progress.active = true;
+            this.notify('Failed to start scan', 'warn')
+          }
+        },
+        exportCSV() {
+          const rows = [
+            ['Target', 'Type', 'Status', 'Vulns', 'Open Ports', 'Started']
+          ];
+          this.scans.forEach(r => rows.push([r.target, r.type || '', r.status || '', (r.results && r.results
+            .vulnerabilities) ? r.results.vulnerabilities.length : (r.vulns || 0), (r.results && r.results
+            .open_ports) ? r.results.open_ports.length : (r.ports || 0), r.created_at]));
+          const csv = rows.map(r => r.map(v => `"${String(v).replaceAll('"', '""')}"`).join(',')).join('\n');
+          const blob = new Blob([csv], {
+            type: 'text/csv'
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `vulnscan_report_${Date.now()}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          this.notify('CSV report downloaded.', 'ok')
+        },
+        printReport() {
+          window.print()
+        },
+        notify(message, type = 'ok') {
+          this.toast.message = message;
+          this.toast.icon = type === 'ok' ?
+            `<svg class='w-5 h-5 text-green-400' viewBox='0 0 24 24' fill='currentColor'><path d='M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.3 7.7l-1.4-1.4z'/></svg>` :
+            `<svg class='w-5 h-5 text-amber-400' viewBox='0 0 24 24' fill='currentColor'><path d='M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z'/></svg>`;
+          this.toast.show = true;
+          setTimeout(() => this.toast.show = false, 2200)
+        }
+      }
+    }
+  </script>
+</body>
+
+</html>
